@@ -1,0 +1,3 @@
+{
+  "default": {"damage":  10, "cooldown": 500, "pierce": 1, "chain": 0, "bounce": false, "bullet_speed": 5, "bullet_duration": 2000}
+}
