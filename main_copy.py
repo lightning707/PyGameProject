@@ -13,16 +13,17 @@ RED = (255, 0, 0)
 FPS = 60
 
 
-class Player:
+class Player(pygame.sprite.Sprite):
     WIDTH, HEIGHT = 35, 35
     CLASSES = {
-        'default': {'hp': 100, 'items': [], 'move_speed': 2}
+        'default': {'hp': 100, 'items': [], 'move_speed': 5}
     }
     IMMUNITY_FRAME_DURATION = 500
     WEAPON_COOLDOWN = 500
 
-    def __init__(self, coord_x, coord_y, class_='default'):
-        self.image = pygame.image.load("Assets/Maxim_verylowres.png").convert_alpha()
+    def __init__(self, coord_x, coord_y, class_='default', *groups):
+        super().__init__(*groups)
+        self.image = pygame.image.load(os.path.join('Assets', 'Player.png')).convert_alpha()
         self.kills = 0
         self.class_ = class_
         self.max_hp = self.CLASSES[class_]['hp']
@@ -31,40 +32,42 @@ class Player:
         self.move_speed = self.CLASSES[class_]['move_speed']
         self.rect = pygame.Rect(coord_x, coord_y, self.WIDTH, self.HEIGHT)
 
-        self.weapons = [Weapon('sniper'), Weapon('flamethrower'), Weapon('default'), Weapon('spinner')]
-        self.current_weapon = self.weapons[0]
+        self.current_weapon = Weapon('default')
+        self.weapons = [self.current_weapon]
         self.last_damage_taken_time = pygame.time.get_ticks()
 
-    def input(self):
+    def move_handler(self):
         keys_pressed = pygame.key.get_pressed()
-        if keys_pressed[pygame.K_a] or keys_pressed[pygame.K_LEFT]:
-            # if self.rect.x > 0:
+        if (keys_pressed[pygame.K_a] or keys_pressed[pygame.K_LEFT]) and self.rect.x > 0:
             self.rect.x -= self.move_speed
-        if keys_pressed[pygame.K_d] or keys_pressed[pygame.K_RIGHT]:
-            # if self.rect.x + self.WIDTH < Game.WIDTH:
+        if (keys_pressed[pygame.K_d] or keys_pressed[pygame.K_RIGHT]) and (
+                self.rect.x + self.WIDTH < Game.WIDTH):
             self.rect.x += self.move_speed
-        if keys_pressed[pygame.K_w] or keys_pressed[pygame.K_UP]:
-            # if self.rect.y > 0:
+        if (keys_pressed[pygame.K_w] or keys_pressed[pygame.K_UP]) and self.rect.y > 0:
             self.rect.y -= self.move_speed
-        if keys_pressed[pygame.K_s] or keys_pressed[pygame.K_DOWN]:
-            # if self.rect.y + self.HEIGHT < Game.HEIGHT:
+        if (keys_pressed[pygame.K_s] or keys_pressed[pygame.K_DOWN]) and (
+                self.rect.y + self.HEIGHT < Game.HEIGHT):
             self.rect.y += self.move_speed
+
+    def shoot_handler(self):
+        keys_pressed = pygame.key.get_pressed()
         if keys_pressed[pygame.K_SPACE]:
             self.current_weapon.shoot()
 
-    def draw(self, window, cam_offset):
-        window.blit(self.image, (self.rect.x + (Player.WIDTH - self.image.get_width()) // 2 - cam_offset[0],
-                                 self.rect.y + (Player.HEIGHT - self.image.get_height()) // 2 - cam_offset[1]))
-        self.current_weapon.draw(window, cam_offset)
+    def draw(self, window):
+        window.blit(self.image, (self.rect.x + (Player.WIDTH - self.image.get_width()) // 2,
+                                 self.rect.y + (Player.HEIGHT - self.image.get_height()) // 2))
+        self.current_weapon.draw(window)
 
 
-class Weapon:
+class Weapon(pygame.sprite.Sprite):
     DISTANCE_FROM_PLAYER = 15
 
     with open('Const/weapons.json') as fd:
         WEAPONS = json.load(fd)
 
-    def __init__(self, name):
+    def __init__(self, name, *groups):
+        super().__init__(*groups)
         if name in self.WEAPONS.keys():
             self.name = name
             self.damage = self.WEAPONS[name]['damage']
@@ -74,73 +77,54 @@ class Weapon:
             self.bounce = self.WEAPONS[name]['bounce']
             self.bullet_speed = self.WEAPONS[name]['bullet_speed']
             self.bullet_duration = self.WEAPONS[name]['bullet_duration']
-            self.bullet_spread = self.WEAPONS[name]['spread']
             self.last_shoot_time = pygame.time.get_ticks()
-            self.image = pygame.image.load(self.WEAPONS[name]["weapon_img"]).convert_alpha()
-            if "weapon_spin" in self.WEAPONS[name].keys():
-                self.weapon_spin = self.WEAPONS[name]["weapon_spin"]
-            else:
-                self.weapon_spin = False
-            if "bullet_spin" in self.WEAPONS[name].keys():
-                self.bullet_spin = self.WEAPONS[name]["bullet_spin"]
-            else:
-                self.bullet_spin = False
-            if self.WEAPONS[name]["bullet_img"]:
-                self.bullet_image = pygame.image.load(self.WEAPONS[name]["bullet_img"]).convert_alpha()
-                self.bullet_rotate = self.WEAPONS[name]["bullet_rotate"]
-            else:
-                self.bullet_image = None
-                self.bullet_rotate = False
-
             self.bullets = []
-            self.current_image = self.image
-            self.center_vector = pygame.Vector2(-100, -100)
-            self.vector_to_mouse = pygame.Vector2(0, 0)
-            self.rotate_angle = 0
+            self.default_image = pygame.image.load(os.path.join('Assets', 'Weapon.png')).convert_alpha()
+            self.image = self.default_image
+
+            self.center_vector = pygame.Vector2()
+            self.rect = pygame.Rect(self.center_vector, (self.image.get_width(), self.image.get_height()))
+            self.vector_to_mouse = pygame.Vector2()
+            self.prev_vector_to_mouse = self.vector_to_mouse
 
     def shoot(self):
-        spread_vector_left = self.vector_to_mouse.rotate_rad(self.bullet_spread)
-        spread_vector_right = self.vector_to_mouse.rotate_rad(-self.bullet_spread)
-        after_spread_vector = random.random() * spread_vector_left + random.random() * spread_vector_right
-        after_spread_vector.normalize_ip()
         if pygame.time.get_ticks() - self.last_shoot_time >= self.cooldown:
             self.last_shoot_time = pygame.time.get_ticks()
-            bullet = Bullet(self.center_vector.x, self.center_vector.y, after_spread_vector, speed=self.bullet_speed,
-                            damage=self.damage, bounce=self.bounce, chain=self.chain, pierce=self.pierce, image=self.bullet_image,
-                            duration=self.bullet_duration, rotate=self.bullet_rotate, spin=self.bullet_spin)
+            bullet = Bullet(self.center_vector.x, self.center_vector.y, self.vector_to_mouse, speed=self.bullet_speed,
+                            damage=self.damage, bounce=self.bounce, chain=self.chain, pierce=self.pierce)
             self.bullets.append(bullet)
 
-    def update_position(self, player_center_x, player_center_y, cam_offset):
-        self.vector_to_mouse = pygame.Vector2(pygame.mouse.get_pos()[0] - player_center_x + cam_offset[0],
-                                              pygame.mouse.get_pos()[1] - player_center_y + cam_offset[1])
+    def update_position(self, player_center_x, player_center_y):
+        self.vector_to_mouse = pygame.Vector2(pygame.mouse.get_pos()[0] - player_center_x,
+                                              pygame.mouse.get_pos()[1] - player_center_y)
         self.vector_to_mouse.normalize_ip()
         self.center_vector = pygame.Vector2(player_center_x, player_center_y) + self.vector_to_mouse * self.DISTANCE_FROM_PLAYER
 
         if self.vector_to_mouse.x > 0:
-            self.current_image = pygame.transform.rotate(self.image, self.vector_to_mouse.angle_to(pygame.Vector2(1,0)))
+            self.image = pygame.transform.rotate(self.default_image, self.vector_to_mouse.angle_to(pygame.Vector2(1,0)))
         else:
-            self.current_image = pygame.transform.flip(self.image, flip_x=True, flip_y=False)
-            self.current_image = pygame.transform.rotate(self.current_image, self.vector_to_mouse.angle_to(pygame.Vector2(-1, 0)))
-        if self.weapon_spin:
-            self.current_image = pygame.transform.rotate(self.current_image, self.rotate_angle)
-            self.rotate_angle = (self.rotate_angle + 3) % 360
+            self.image = pygame.transform.flip(self.default_image, flip_x=True, flip_y=False)
+            self.image = pygame.transform.rotate(self.image, self.vector_to_mouse.angle_to(pygame.Vector2(-1, 0)))
+        image_width = self.image.get_width()
+        image_height = self.image.get_height()
+        self.rect.x = self.center_vector.x - image_width / 2
+        self.rect.y = self.center_vector.y - image_height / 2
+        self.rect.width = image_width
+        self.rect.height = image_height
+        print(self.rect)
 
-    def draw(self, window, cam_offset):
-        if not self.weapon_spin:
-            coord = (self.center_vector.x - self.image.get_width() / 2 - cam_offset[0],
-                     self.center_vector.y - self.image.get_height() / 2 - cam_offset[1])
-        if self.weapon_spin:
-            coord = (self.center_vector.x - self.current_image.get_width() / 2 - cam_offset[0],
-                     self.center_vector.y - self.current_image.get_height() / 2 - cam_offset[1])
-        window.blit(self.current_image, coord)
+    def draw(self, window):
+        window.blit(self.image, self.rect)
 
 
-class Bullet:
-    WIDTH, HEIGHT = 7, 7
-    DELETION_OFFSET = 500
+class Bullet(pygame.sprite.Sprite):
+    WIDTH, HEIGHT = 3, 3
+    DELETION_OFFSET = 300
 
-    def __init__(self, coord_x, coord_y, vector, speed=3, color=BLACK, damage=5, is_allied=False, bounce=False,
-                 pierce=False, chain=False, duration=2000, image=None, rotate=False, spin=False):
+    def __init__(self, coord_x, coord_y, vector, *groups, speed=3, color=BLACK, damage=5, is_allied=False, bounce=False,
+                 pierce=0, chain=0, duration=2000):
+        super().__init__(*groups)
+        self.rect = pygame.Rect(coord_x, coord_y, self.WIDTH, self.HEIGHT)
         self.vector = vector
         self.is_allied = is_allied
         self.color = color
@@ -150,61 +134,39 @@ class Bullet:
         self.pierce = pierce
         self.chain = chain
         self.duration = duration
-        self.image = image
-        self.rotate = rotate
-        self.creation_time = pygame.time.get_ticks()
-        self.spin = spin
+        self.position_vector = pygame.Vector2(coord_x, coord_y)
 
-        self.spin_angle = 0
-        self.position_vector = pygame.Vector2(coord_x - self.WIDTH // 2, coord_y - self.HEIGHT // 2)
-        self.rect = pygame.Rect(coord_x, coord_y, self.WIDTH, self.HEIGHT)
-
-    def move(self, cam_offset):
+    def move(self):
         if self.bounce:
-            surface = pygame.display.get_surface()
-            if (self.rect.right - cam_offset[0] >= surface.get_width() and self.vector.x > 0) or (
-                    self.rect.left - cam_offset[0] <= 0 and self.vector.x < 0):
+            if self.rect.right >= Game.WIDTH or self.rect.left <= 0:
                 self.vector.x *= -1
-            if (self.rect.bottom - cam_offset[1] >= Game.HEIGHT and self.vector.y > 0) or (
-                    self.rect.top - cam_offset[1] <= 0 and self.vector.y < 0):
+            if self.rect.bottom >= Game.HEIGHT or self.rect.top <= 0:
                 self.vector.y *= -1
         self.position_vector.x += self.vector.x * self.speed
         self.position_vector.y += self.vector.y * self.speed
         self.rect.x = self.position_vector.x
         self.rect.y = self.position_vector.y
 
-    def draw(self, window, cam_offset):
-        if self.image is None:
-            pygame.draw.rect(window, self.color, pygame.Rect(self.rect.x - cam_offset[0], self.rect.y - cam_offset[1], self.WIDTH, self.HEIGHT))
-        else:
+    def draw(self, window):
+        pygame.draw.rect(window, self.color, self.rect)
 
-            if self.rotate:
-                img = pygame.transform.rotate(self.image, self.vector.angle_to(pygame.Vector2(1,0)))
-            elif self.spin:
-                img = pygame.transform.rotate(self.image, self.spin_angle)
-                self.spin_angle = (self.spin_angle + 10) % 360
-            else:
-                img = self.image
-
-            img_rect = img.get_rect()
-            img_rect.x = self.position_vector.x - img_rect.width // 2
-            img_rect.y = self.position_vector.y - img_rect.height // 2
-            window.blit(img, pygame.Rect(img_rect.x - cam_offset[0], img_rect.y - cam_offset[1],
-                                                img_rect.width, img_rect.height))
 
 class Item:
     def __init__(self, type_):
         pass
 
 
-class Enemy:
+class Enemy(pygame.sprite.Sprite):
     TYPES = {
         'default': {'hp': 20, 'move_speed': 1, 'damage': 10}
     }
     WIDTH, HEIGHT = 20, 20
     IMMUNITY_FRAME_DURATION = 1000
 
-    def __init__(self, coord_x, coord_y, type_='default'):
+    def __init__(self, coord_x, coord_y, *groups, type_='default'):
+        print(*groups)
+        super().__init__()
+        self.add(*groups)
         self.type_ = type_
         self.hp = self.TYPES[type_]['hp']
         self.move_speed = self.TYPES[type_]['move_speed']
@@ -218,12 +180,27 @@ class Enemy:
         hit_time = pygame.time.get_ticks()
         self.immunity_timers.update({bullet: hit_time})
 
-    def draw(self, window, cam_offset):
-        window.blit(self.image, (self.rect.x + (Enemy.WIDTH - self.image.get_width()) // 2 - cam_offset[0],
-                                 self.rect.y + (Enemy.HEIGHT - self.image.get_height()) // 2 - cam_offset[1]))
+    def draw(self, window):
+        window.blit(self.image, (self.rect.x + (Enemy.WIDTH - self.image.get_width()) // 2,
+                                 self.rect.y + (Enemy.HEIGHT - self.image.get_height()) // 2))
 
     def die(self):
         print('I am dead')
+
+    def update(self):
+        pass
+
+
+class CameraGroup(pygame.sprite.Group):
+    def __init__(self):
+        super().__init__()
+        self.display_surface = pygame.display.get_surface()
+        self.offset = pygame.Vector2()
+
+    def custom_draw(self):
+        for sprite in self.sprites():
+            offset_rect = sprite.rect.topleft - self.offset
+            self.display_surface.blit(sprite.image, offset_rect)
 
 
 class Game:
@@ -238,7 +215,9 @@ class Game:
     YOU_DIED_FONT = pygame.font.Font(None, 100)
 
     def __init__(self):
-        self.camera_offset = pygame.math.Vector2()
+        self.camera_group = CameraGroup()
+        self.enemy_group = pygame.sprite.Group()
+
         self.window = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
         self.player = Player((self.WIDTH - Player.WIDTH) // 2, (self.HEIGHT - Player.HEIGHT) // 2)
         self.state = 'running'
@@ -252,6 +231,9 @@ class Game:
         self.game_over_text_alpha = 1
         self.game_over_animation = False
 
+        self.all_sprites = pygame.sprite.Group()
+
+
     def draw_hp_bar(self):
         hp_bar_border_rect = pygame.Rect(self.WIDTH - self.HP_BAR_WIDTH - 10, 10,
                                          self.HP_BAR_WIDTH, self.HP_BAR_HEIGHT)
@@ -262,21 +244,18 @@ class Game:
         pygame.draw.rect(self.window, RED, rect=hp_bar_rect)
 
     def draw(self):
-        half_width = self.window.get_width() // 2
-        half_height = self.window.get_height() // 2
-        self.camera_offset = pygame.math.Vector2(self.player.rect.centerx - half_width, self.player.rect.centery - half_height)
         self.window.fill(WHITE)
-        self.player.draw(self.window, self.camera_offset)
+        self.player.draw(self.window)
         for weapon in self.player.weapons:
             for bullet in weapon.bullets:
-                bullet.draw(self.window, self.camera_offset)
+                bullet.draw(self.window)
 
         def get_coord_y(obj):
             return obj.position_vector.y
         self.enemies.sort(key=get_coord_y)
 
         for enemy in self.enemies:
-            enemy.draw(self.window, self.camera_offset)
+            enemy.draw(self.window)
         kills = self.TEXT_FONT.render(f"Kills: {self.player.kills}", True, BLACK)
         self.window.blit(kills, (10, 10))
         self.draw_hp_bar()
@@ -284,7 +263,7 @@ class Game:
     def move_bullets(self):
         for weapon in self.player.weapons:
             for bullet in weapon.bullets:
-                bullet.move(self.camera_offset)
+                bullet.move()
 
     def move_enemies(self):
         for enemy in self.enemies:
@@ -298,7 +277,7 @@ class Game:
             enemy.rect.y = enemy.position_vector.y
 
     def create_enemy(self, coord_x, coord_y, type_='default'):
-        enemy = Enemy(coord_x, coord_y, type_=type_)
+        enemy = Enemy(coord_x, coord_y, CameraGroup, type_=type_)
         self.enemies.append(enemy)
 
     def spawn_enemies(self):
@@ -306,20 +285,18 @@ class Game:
             self.last_spawn_time = pygame.time.get_ticks()
             spawn_sector = random.choice(['left', 'right', 'top', 'bottom'])
             if spawn_sector == 'top':
-                spawn_coord = (random.randint(0, self.WIDTH) + self.camera_offset[0],
-                               random.randint(-self.SPAWN_BOX_SIZE, -self.SPAWN_BOX_OFFSET) + self.camera_offset[1])
+                spawn_coord = (random.randint(0, self.WIDTH), random.randint(-self.SPAWN_BOX_SIZE, -self.SPAWN_BOX_OFFSET))
             elif spawn_sector == 'left':
-                spawn_coord = (random.randint(-self.SPAWN_BOX_SIZE, -self.SPAWN_BOX_OFFSET) + self.camera_offset[0],
-                               random.randint(0, self.HEIGHT) + self.camera_offset[1])
+                spawn_coord = (random.randint(-self.SPAWN_BOX_SIZE, -self.SPAWN_BOX_OFFSET), random.randint(0, self.HEIGHT))
             elif spawn_sector == 'right':
-                spawn_coord = (random.randint(self.WIDTH + self.SPAWN_BOX_OFFSET, self.WIDTH + self.SPAWN_BOX_SIZE) + self.camera_offset[0],
-                               random.randint(0, self.HEIGHT) + + self.camera_offset[1])
+                spawn_coord = (random.randint(self.WIDTH + self.SPAWN_BOX_OFFSET, self.WIDTH + self.SPAWN_BOX_SIZE),
+                               random.randint(0, self.HEIGHT))
             elif spawn_sector == 'bottom':
-                spawn_coord = (random.randint(0, self.WIDTH) + self.camera_offset[0],
-                               random.randint(self.HEIGHT + self.SPAWN_BOX_OFFSET, self.HEIGHT + self.SPAWN_BOX_SIZE) + self.camera_offset[1])
+                spawn_coord = (random.randint(0, self.WIDTH),
+                               random.randint(self.HEIGHT + self.SPAWN_BOX_OFFSET, self.HEIGHT + self.SPAWN_BOX_SIZE))
             self.create_enemy(spawn_coord[0], spawn_coord[1])
 
-    def event_handler(self):
+    def state_handler(self):
         if self.player.current_hp <= 0:
             self.state = 'game_over'
         for event in pygame.event.get():
@@ -331,15 +308,6 @@ class Game:
                         self.state = 'paused'
                     else:
                         self.state = 'running'
-            if event.type == pygame.MOUSEWHEEL:
-                curr_weapon_idx = self.player.weapons.index(self.player.current_weapon)
-                if event.y < 0:
-                    if curr_weapon_idx < len(self.player.weapons) - 1:
-                        self.player.current_weapon = self.player.weapons[curr_weapon_idx + 1]
-                    else:
-                        self.player.current_weapon = self.player.weapons[0]
-                elif event.y > 0:
-                    self.player.current_weapon = self.player.weapons[curr_weapon_idx - 1]
 
 
     def bullet_collision(self):
@@ -356,11 +324,6 @@ class Game:
                                 enemy.die()
                                 self.player.kills += 1
                                 self.enemies.remove(enemy)
-                            if bullet.chain:
-                                bullet.vector = -bullet.vector
-                            elif not bullet.pierce:
-                                if bullet in weapon.bullets:
-                                    weapon.bullets.remove(bullet)
 
     def player_collision(self):
         if pygame.time.get_ticks() - self.player.last_damage_taken_time > Player.IMMUNITY_FRAME_DURATION:
@@ -369,22 +332,16 @@ class Game:
                 if self.player.rect.colliderect(enemy.rect):
                     self.player.current_hp -= enemy.damage
 
-    def update_bullets(self):
+    def delete_bullets_out_of_bounds(self):
         if self.last_bullet_deletion_time >= self.BULLET_DELETION_INTERVAL:
             for weapon in self.player.weapons:
                 for bullet in weapon.bullets:
                     if not bullet.bounce:
-                        if bullet.rect.left + bullet.DELETION_OFFSET - self.camera_offset[0] < 0 or \
-                                bullet.rect.right - bullet.DELETION_OFFSET - self.camera_offset[0] > Game.WIDTH or \
-                                bullet.rect.top + bullet.DELETION_OFFSET - self.camera_offset[1] < 0 or \
-                                bullet.rect.bottom - bullet.DELETION_OFFSET - self.camera_offset[1] > Game.HEIGHT:
-                            if bullet in weapon.bullets:
-                                weapon.bullets.remove(bullet)
-        for weapon in self.player.weapons:
-            for bullet in weapon.bullets:
-                if pygame.time.get_ticks() - bullet.creation_time > bullet.duration:
-                    if bullet in weapon.bullets:
-                        weapon.bullets.remove(bullet)
+                        if bullet.rect.left + bullet.DELETION_OFFSET < 0 or \
+                                bullet.rect.right - bullet.DELETION_OFFSET > Game.WIDTH or \
+                                bullet.rect.top + bullet.DELETION_OFFSET < 0 or \
+                                bullet.rect.bottom - bullet.DELETION_OFFSET > Game.HEIGHT:
+                            weapon.bullets.remove(bullet)
 
     def draw_game_over(self):
         self.draw()
@@ -410,16 +367,17 @@ def main():
     game = Game()
     while game.state != 'quit':
         clock.tick(FPS)
-        game.event_handler()
+        game.state_handler()
         if game.state == 'running':
-            game.player.current_weapon.update_position(game.player.rect.centerx, game.player.rect.centery, game.camera_offset)
-            game.player.input()
+            game.player.current_weapon.update_position(game.player.rect.centerx, game.player.rect.centery)
+            game.player.move_handler()
+            game.player.shoot_handler()
             game.move_bullets()
             game.move_enemies()
             game.spawn_enemies()
             game.bullet_collision()
             game.player_collision()
-            game.update_bullets()
+            game.delete_bullets_out_of_bounds()
             game.draw()
         elif game.state == 'game_over':
             game.draw_game_over()
@@ -431,7 +389,7 @@ def main():
         elif game.state == 'main_menu':
             pass
         pygame.display.update()
-        # print(game.state)
+        print(game.state)
     pygame.quit()
 
 
