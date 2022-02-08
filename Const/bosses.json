@@ -1,0 +1,5 @@
+{
+  "DungeonMaster": {"hp": 250, "move_speed": 1, "damage": 30, "image_path": "Assets/Bosses/DungeonMaster"},
+  "GoblinKing": {"hp": 250, "move_speed": 1, "damage": 30, "image_path": "Assets/Bosses/GoblinKing"},
+  "SlimeKing": {"hp": 250, "move_speed": 1, "damage": 30, "image_path": "Assets/Bosses/SlimeKing"}
+}

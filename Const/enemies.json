@@ -1,0 +1,5 @@
+{
+  "Goblin": {"hp": 5, "move_speed": 1.5, "damage": 5, "image_path": "Assets/Monsters/Goblin", "is_boss": false},
+  "Skeleton": {"hp":  7, "move_speed": 1, "damage": 8, "image_path": "Assets/Monsters/Skeleton", "is_boss": false},
+  "Slime": {"hp": 5, "move_speed": 1, "damage": 6, "image_path": "Assets/Monsters/Slime", "is_boss": false}
+}
