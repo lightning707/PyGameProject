@@ -40,16 +40,12 @@ class Player:
     def input(self):
         keys_pressed = pygame.key.get_pressed()
         if keys_pressed[pygame.K_a] or keys_pressed[pygame.K_LEFT]:
-            # if self.rect.x > 0:
             self.rect.x -= self.move_speed
         if keys_pressed[pygame.K_d] or keys_pressed[pygame.K_RIGHT]:
-            # if self.rect.x + self.WIDTH < Game.WIDTH:
             self.rect.x += self.move_speed
         if keys_pressed[pygame.K_w] or keys_pressed[pygame.K_UP]:
-            # if self.rect.y > 0:
             self.rect.y -= self.move_speed
         if keys_pressed[pygame.K_s] or keys_pressed[pygame.K_DOWN]:
-            # if self.rect.y + self.HEIGHT < Game.HEIGHT:
             self.rect.y += self.move_speed
         if keys_pressed[pygame.K_SPACE]:
             self.current_weapon.shoot()
@@ -124,12 +120,12 @@ class Weapon:
             self.rotate_angle = (self.rotate_angle + 3) % 360
 
     def draw(self, window, cam_offset):
-        if not self.weapon_spin:
-            coord = (self.center_vector.x - self.image.get_width() / 2 - cam_offset[0],
-                     self.center_vector.y - self.image.get_height() / 2 - cam_offset[1])
         if self.weapon_spin:
             coord = (self.center_vector.x - self.current_image.get_width() / 2 - cam_offset[0],
                      self.center_vector.y - self.current_image.get_height() / 2 - cam_offset[1])
+        else:
+            coord = (self.center_vector.x - self.image.get_width() / 2 - cam_offset[0],
+                     self.center_vector.y - self.image.get_height() / 2 - cam_offset[1])
         window.blit(self.current_image, coord)
 
 
@@ -194,6 +190,7 @@ class Bullet:
 class DamageNumber:
     DURATION = 500
     FONT = pygame.font.Font(None, 40)
+
     def __init__(self, text, coord_x, coord_y, color=WHITE):
         self.creation_time = pygame.time.get_ticks()
         self.image = self.FONT.render(str(text), True, color)
@@ -322,7 +319,7 @@ class Game:
         self.create_tileset(tileset_image)
 
         self.current_time = 0
-        self.current_wave = 1
+        self.current_wave = 0
 
     def draw_hp_bar(self):
         hp_bar_border_rect = pygame.Rect(self.WIDTH - self.HP_BAR_WIDTH - 10, 10,
@@ -372,12 +369,15 @@ class Game:
             enemy.update(self.player)
 
             for second_enemy in self.enemies[enemy_id:]:
-                if enemy.rect.colliderect(second_enemy.rect):
+                if enemy.rect.colliderect(second_enemy.rect) and second_enemy != enemy:
                     first_vector = second_enemy.position_vector - enemy.position_vector
+                    if first_vector.x != 0 and first_vector.y != 0:
+                        first_vector.normalize_ip()
+                    else:
+                        first_vector *= 0.01
                     second_vector = -first_vector
-
-                    enemy.position_vector += second_vector * 0.05
-                    second_enemy.position_vector += first_vector * 0.05
+                    enemy.position_vector += second_vector
+                    second_enemy.position_vector += first_vector * 0.01
 
             enemy.position_vector.x += enemy.vector.x
             enemy.position_vector.y += enemy.vector.y
@@ -429,7 +429,7 @@ class Game:
             self.create_enemy(spawn_coord[0], spawn_coord[1])
 
     def event_handler(self):
-        if self.player.current_hp <= 0:
+        if self.player.current_hp <= 0 or self.current_wave == 10:
             self.state = 'game_over'
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
